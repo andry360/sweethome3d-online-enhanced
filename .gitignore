@@ -1,0 +1,6 @@
+# Real test fixtures with unclear redistribution terms - place locally, do not commit
+/import-materials-for-tests/
+
+# Homes saved to the local dev server (SweetHome3DJS-7.5.2-src/local-server/server.js) - runtime
+# user data, not source
+/SweetHome3DJS-7.5.2-src/local-server/data/
