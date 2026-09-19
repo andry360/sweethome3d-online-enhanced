@@ -8,6 +8,7 @@
 # resource JSON generated from the desktop Java sources) - regenerate with the build, don't commit
 /lib/generated/
 /lib/resources/
+/tools/json/build/
 
 /SweetHome3DJS_online_customization_plan.md
 
