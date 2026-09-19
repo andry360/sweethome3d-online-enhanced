@@ -240,6 +240,7 @@
       	<file name="ContentDigestManager.js"/>
       	<file name="DefaultFurnitureCatalog.js"/>
         <file name="DefaultTexturesCatalog.js"/>
+        <file name="ImportController.js"/>
         <file name="FurnitureCatalogListPanel.js"/>
       	<file name="FurnitureTablePanel.js"/>
         <file name="toolkit.js"/>

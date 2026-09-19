@@ -504,6 +504,40 @@ label {
   border-width: thin;
   border-radius: 5px;
   padding-left: 20px;
+  /* Leave room for #furniture-catalog-view-mode-switch on the same row */
+  width: calc(100% - 3px - 78px);
+}
+
+/* Grid/Tree switch: sits on the same row as the search field, so it must not inherit
+   #furniture-filter > *'s width: calc(100% - 3px) like every other direct child does. */
+#furniture-catalog-view-mode-switch {
+  display: inline-block;
+  vertical-align: top;
+  width: 74px;
+  white-space: nowrap;
+}
+
+#furniture-catalog-view-mode-switch .furniture-catalog-view-mode-button {
+  font-size: 0.7em;
+  padding: 1px 4px;
+  border: solid thin gray;
+  background-color: #FFFFFFAA;
+}
+
+#furniture-catalog-view-mode-switch .furniture-catalog-view-mode-button.selected {
+  font-weight: bold;
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Single-column tree table: JSTreeTable's [body]/[row] default to inline-flex/min-width:100%,
+   which shrink-to-fit at roughly half width with only one column. */
+.furniture-catalog-tree .tree-table [body] {
+  display: flex;
+  width: 100%;
+}
+
+.furniture-catalog-tree .tree-table [body] [row] {
+  width: 100%;
 }
 
 @media (hover: none), (pointer: coarse) {

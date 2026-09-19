@@ -147,9 +147,57 @@ FurnitureCatalogListPanel.prototype.createComponents = function (catalog, prefer
       ev.stopPropagation();
     });
   filteringDiv.appendChild(searchInput);
-  
+
+  // Grid/Tree view mode switch, persisted in localStorage (default: Grid)
+  var viewModeSwitch = document.createElement("div");
+  viewModeSwitch.id = "furniture-catalog-view-mode-switch";
+  var gridViewModeButton = document.createElement("button");
+  gridViewModeButton.type = "button";
+  gridViewModeButton.textContent = "Grid";
+  gridViewModeButton.classList.add("furniture-catalog-view-mode-button");
+  var treeViewModeButton = document.createElement("button");
+  treeViewModeButton.type = "button";
+  treeViewModeButton.textContent = "Tree";
+  treeViewModeButton.classList.add("furniture-catalog-view-mode-button");
+  viewModeSwitch.appendChild(gridViewModeButton);
+  viewModeSwitch.appendChild(treeViewModeButton);
+  filteringDiv.appendChild(viewModeSwitch);
+  // furnitureCatalogListPanel.treeTable / .treeContainer aren't created yet at this point in
+  // createComponents (see below), but this function is only ever invoked later, on click.
+  var setCatalogViewMode = function(mode) {
+      furnitureCatalogListPanel.catalogViewMode = mode;
+      localStorage.setItem("catalogViewMode", mode);
+      gridViewModeButton.classList.toggle("selected", mode === "grid");
+      treeViewModeButton.classList.toggle("selected", mode === "tree");
+      furnitureCatalogList.style.display = mode === "grid" ? "" : "none";
+      furnitureCatalogListPanel.treeContainer.style.display = mode === "tree" ? "" : "none";
+      if (mode === "tree") {
+        // JSTreeTable.setData() is a no-op while its container is display:none, so the first
+        // switch to tree mode (or any switch after catalog data changed while hidden) must
+        // force a re-render now that the container is visible.
+        furnitureCatalogListPanel.treeTable.setData(furnitureCatalogListPanel.treeTable.getData());
+      }
+    };
+  furnitureCatalogListPanel.setCatalogViewMode = setCatalogViewMode;
+  gridViewModeButton.addEventListener("click", function() { setCatalogViewMode("grid"); });
+  treeViewModeButton.addEventListener("click", function() { setCatalogViewMode("tree"); });
+
   // Create catalog
   this.resetFurnitureCatalog(catalog);
+
+  // Tree view: same catalog instance and selection as the grid view, no duplicated data.
+  var treeContainer = document.createElement("div");
+  // Shares the furniture-catalog-list class to inherit the grid's scrolling/sizing/selection
+  // CSS (and stay first-match-safe: existing code always does getElementsByClassName(
+  // "furniture-catalog-list")[0], and this container is inserted after the grid so it never
+  // becomes that [0] match) - furniture-catalog-tree only adds the tree-specific overrides.
+  treeContainer.className = "furniture-catalog-list furniture-catalog-tree";
+  furnitureCatalogList.parentElement.insertBefore(treeContainer, furnitureCatalogList.nextSibling);
+  this.treeContainer = treeContainer;
+  this.treeTable = new JSTreeTable(treeContainer, preferences, this.createFurnitureTreeTableModel());
+  this.treeTable.setData(this.getFurnitureCatalogTreeData(catalog));
+
+  setCatalogViewMode(localStorage.getItem("catalogViewMode") === "tree" ? "tree" : "grid");
   
   // Tooltip management
   var currentFurnitureContainer;
@@ -240,6 +288,7 @@ FurnitureCatalogListPanel.prototype.createComponents = function (catalog, prefer
       if (!furnitureCatalogListPanel.furnitureCatalogUpdater) {
         furnitureCatalogListPanel.furnitureCatalogUpdater = function() {
             furnitureCatalogListPanel.resetFurnitureCatalog(catalog);
+            furnitureCatalogListPanel.treeTable.setData(furnitureCatalogListPanel.getFurnitureCatalogTreeData(catalog));
             delete furnitureCatalogListPanel.furnitureCatalogUpdater;
           };
         setTimeout(furnitureCatalogListPanel.furnitureCatalogUpdater, 0);
@@ -281,16 +330,18 @@ FurnitureCatalogListPanel.prototype.filterCatalog = function(categoryIndex, piec
   var categories = categoryIndex == null || categoryIndex === 0
       ? this.catalog.getCategories()
       : [this.catalog.getCategories()[categoryIndex - 1]];
+  var matchingPieces = [];
   for (var i = 0; i < categories.length ; i++) {
     var category = categories[i];
     var furniture = pieceFilter == null
         ? category.getFurniture()
         : category.getFurniture().filter(pieceFilter);
     if (furniture != null && furniture.length > 0) {
+      matchingPieces = matchingPieces.concat(furniture);
       var elements = this.findCategoryElements(category);
       elements.forEach(function(element) {
-          if (categories.length > 1 
-              && (element.classList.contains("furniture-category-label") 
+          if (categories.length > 1
+              && (element.classList.contains("furniture-category-label")
                   || element.classList.contains("furniture-category-separator"))) {
             element.style.display = element._displayBackup;
           }
@@ -300,6 +351,72 @@ FurnitureCatalogListPanel.prototype.filterCatalog = function(categoryIndex, piec
         });
     }
   }
+  // Auto-expand/highlight the same matches in the tree view - doesn't touch the real
+  // furniture-controller selection (see JSTreeTable.setSelectedRowsByValue).
+  this.treeTable.setSelectedRowsByValue(matchingPieces);
+}
+
+/**
+ * Returns the {value, children} tree data for the whole catalog: one top-level row per
+ * category, one child row per piece of furniture in that category.
+ * @private
+ */
+FurnitureCatalogListPanel.prototype.getFurnitureCatalogTreeData = function(catalog) {
+  var data = [];
+  var categories = catalog.getCategories();
+  for (var i = 0; i < categories.length; i++) {
+    var category = categories[i];
+    var furniture = category.getFurniture();
+    var children = [];
+    for (var j = 0; j < furniture.length; j++) {
+      children.push({value: furniture[j]});
+    }
+    data.push({value: category, children: children});
+  }
+  return data;
+}
+
+/**
+ * Returns the JSTreeTable model for the catalog tree view: a single NAME column, sorted by
+ * name for both categories and pieces (both classes expose getName()).
+ * @private
+ */
+FurnitureCatalogListPanel.prototype.createFurnitureTreeTableModel = function() {
+  var furnitureCatalogListPanel = this;
+  return {
+      columns: [
+        {name: "NAME", label: "Name", defaultWidth: "100%"}
+      ],
+      renderCell: function(value, columnName, cell) {
+        cell.textContent = value.getName();
+      },
+      getValueComparator: function(sortConfig) {
+        var comparator = function(value1, value2) {
+            return value1.getName().localeCompare(value2.getName());
+          };
+        if (sortConfig && sortConfig.direction === "desc") {
+          return function(value1, value2) { return comparator(value2, value1); };
+        }
+        return comparator;
+      },
+      selectionChanged: function(values) {
+        var pieces = values.filter(function(value) { return value instanceof CatalogPieceOfFurniture; });
+        if (pieces.length > 0) {
+          furnitureCatalogListPanel.controller.setSelectedFurniture(pieces);
+        }
+      },
+      rowDoubleClicked: function(value) {
+      },
+      expandedRowsChanged: function(expandedRowsValues, expandedRowsIndices) {
+      },
+      sortChanged: function(newSort) {
+        // sortTable() only updates internal state and calls this hook - it doesn't re-render
+        // on its own (unlike FurnitureTablePanel's usage, which round-trips through Home's own
+        // sort properties); force it directly since there's no external state to round-trip.
+        furnitureCatalogListPanel.treeTable.setData(furnitureCatalogListPanel.treeTable.getData());
+      },
+      initialState: {}
+    };
 }
 
 /**
@@ -519,5 +636,6 @@ FurnitureCatalogListPanel.prototype.dispose = function() {
   this.preferences.removePropertyChangeListener("LANGUAGE", this.languageChangeListener);
   this.clearFurnitureCatalog();
   this.container.removeChild(document.getElementById("furniture-filter"));
+  this.container.removeChild(this.treeContainer);
   this.toolTipDiv.parentElement.removeChild(this.toolTipDiv);
 }

@@ -1221,10 +1221,14 @@ HomePane.prototype.createPopupMenus = function(home, preferences) {
     // Catalog view popup menu
     var furnitureCatalogView = this.controller.getFurnitureCatalogController().getView();
     if (furnitureCatalogView != null) {
-      this.furnitureCatalogPopupMenu = new JSPopupMenu(preferences, furnitureCatalogView.getHTMLElement(), 
+      if (!this.importController) {
+        this.importController = new ImportController(controller, preferences);
+      }
+      this.furnitureCatalogPopupMenu = new JSPopupMenu(preferences, furnitureCatalogView.getHTMLElement(),
           function(builder) {
             homePane.addActionToMenu(ActionType.ADD_HOME_FURNITURE, builder);
             homePane.addActionToMenu(ActionType.ADD_FURNITURE_TO_GROUP, builder);
+            homePane.importController.addPopupMenuItems(builder);
           });
     }
   
