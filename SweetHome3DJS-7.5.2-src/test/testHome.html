@@ -755,8 +755,12 @@ function testFurnitureCatalog() {
   furnitureCatalog = preferences.getFurnitureCatalog();
   assertEquals("Wrong category", "Chambre", furnitureCatalog.getCategories()[0].getName());
   assertEquals("Wrong furniture", "Armoire", furnitureCatalog.getCategories()[0].getFurniture()[0].getName());
-  
-  console.log("End of testFurnitureCatalog");          
+
+  // Restore the default locale: this test leaves it set to French otherwise, which then
+  // leaks into the real application built further down this page (its own preferences
+  // lazily pick up whatever Locale.getDefault() returns on their first getLocalizedString call).
+  Locale.setDefault("en_US");
+  console.log("End of testFurnitureCatalog");
 }
 
 /**
@@ -2913,14 +2917,43 @@ testHome();
 </div>
 
 <script type="text/javascript">
-// If set to not null value, requires the server to be properly started on localhost:8080 with a ROOT path 
+// If set to not null value, requires the server to be properly started on localhost:8080 with a ROOT path
 // and this page being accessed from localhost:8080 too (using a module path pointing on project for example)
 var urlBase = 'http://localhost:8080';
 var useServer = false;
 var skipTests = window.location.search.indexOf("skipTests=true") >= 0;
+// Shared-projects (Feature 2) dev/test mode: exercises DirectHomeRecorder against
+// local-server/server.js (a dependency-free Node stand-in for deployDirectHomeRecorder/*.php,
+// see local-server/server.js for why - no PHP install is assumed). Load this page from that
+// server (e.g. node local-server/server.js, then
+// http://127.0.0.1:8000/test/testHome.html?skipTests=true&sharedProjects=true) rather than
+// from the plain static server used for the other two modes.
+var sharedProjects = window.location.search.indexOf("sharedProjects=true") >= 0;
 
-var application = useServer
-    ? new SweetHome3DJSApplication(
+var application;
+if (sharedProjects) {
+  var sharedProjectsUrlBase = window.location.origin + "/";
+  application = new SweetHome3DJSApplication(
+      {readHomeURL:               sharedProjectsUrlBase + "data/%s.sh3x",
+       writeHomeURL:              sharedProjectsUrlBase + "writeData.php?path=%s.sh3x",
+       writeResourceURL:          sharedProjectsUrlBase + "writeData.php?path=%s",
+       readResourceURL:           sharedProjectsUrlBase + "data/%s",
+       listHomesURL:              sharedProjectsUrlBase + "listHomes.php",
+       deleteHomeURL:             sharedProjectsUrlBase + "deleteHome.php?home=%s",
+       uploadHomeURL:             sharedProjectsUrlBase + "uploadHome.php",
+       furnitureCatalogURLs:      [ZIPTools.getScriptFolder() + "resources/DefaultFurnitureCatalog.json"],
+       furnitureResourcesURLBase: ZIPTools.getScriptFolder() + "../",
+       texturesCatalogURLs:       [ZIPTools.getScriptFolder() + "resources/DefaultTexturesCatalog.json"],
+       texturesResourcesURLBase:  ZIPTools.getScriptFolder() + "../",
+       writeHomeWithWorker:       true,
+       compressionLevel:          5,
+       defaultHomeName:           "sweethome3d-test-default"
+      });
+  // No readHome bootstrap: mirrors deployDirectHomeRecorder/index.html's production
+  // behavior of starting from a fresh home and letting the user Open a shared project.
+  application.addHome(application.createHome());
+} else if (useServer) {
+  application = new SweetHome3DJSApplication(
           {readHomeURL:                 urlBase + "/readHome.jsp?home=%s",
            writeHomeEditsURL:           urlBase + "/writeHomeEdits.jsp",
            closeHomeURL:                urlBase + "/closeHome.jsp?home=%s",
@@ -2948,8 +2981,26 @@ var application = useServer
                  console.info("Lost server connection - going offline");
                }
              }
-          })
-    : new SweetHome3DJSApplication(
+          });
+  var homeName = "HomeTest";
+  application.getHomeRecorder().readHome(homeName,
+      {
+        homeLoaded: function(home) {
+          home.setName(homeName);
+          application.addHome(home);
+          if (!skipTests) {
+            setTimeout(testHomeModifications, 1000);
+          }
+        },
+        homeError: function(err) {
+          console.error(err);
+          alert(err);
+        },
+        progression: function(part, info, percentage) {
+        }
+      });
+} else {
+  application = new SweetHome3DJSApplication(
           {furnitureCatalogURLs:     [ZIPTools.getScriptFolder() + "resources/DefaultFurnitureCatalog.json"],
            furnitureResourcesURLBase: ZIPTools.getScriptFolder() + "../",
            texturesCatalogURLs:      [ZIPTools.getScriptFolder() + "resources/DefaultTexturesCatalog.json"],
@@ -2959,28 +3010,28 @@ var application = useServer
            writeHomeWithWorker: true,
            autoRecovery: skipTests
           });
-var homeName = useServer ? "HomeTest" : window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/resources/HomeTest.sh3d";
+  var homeName = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/resources/HomeTest.sh3d";
 
-// Read and display test file 
-// TODO Should be performed in HomeController.open
-application.getHomeRecorder().readHome(homeName, 
-    {
-      homeLoaded: function(home) {
-        home.setName(homeName);
-        application.addHome(home);
-        
-        if (!skipTests) {
-          setTimeout(testHomeModifications, 1000);
+  // Read and display test file
+  // TODO Should be performed in HomeController.open
+  application.getHomeRecorder().readHome(homeName,
+      {
+        homeLoaded: function(home) {
+          home.setName(homeName);
+          application.addHome(home);
+
+          if (!skipTests) {
+            setTimeout(testHomeModifications, 1000);
+          }
+        },
+        homeError: function(err) {
+          console.error(err);
+          alert(err);
+        },
+        progression: function(part, info, percentage) {
         }
-      },
-      homeError: function(err) {
-        console.error(err);
-        alert(err);
-      },
-      progression: function(part, info, percentage) {
-      }
-    });
-    
+      });
+}
 </script>
 
 </body>

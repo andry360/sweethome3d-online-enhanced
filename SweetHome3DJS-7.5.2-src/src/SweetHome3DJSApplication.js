@@ -25,9 +25,46 @@
 // Requires JSViewFactory.js
 
 /**
+ * Exports the home managed by this controller as a downloadable .sh3d file, using the
+ * browser's native download behavior. Independent of how homes are otherwise saved
+ * (locally or on a shared server): always serializes with a throwaway, unconfigured
+ * HomeRecorder so the result is a real, complete .sh3d blob rather than a server write.
+ */
+HomeController.prototype.exportHome = function() {
+  var preferences = this.application.getUserPreferences();
+  var homeExtension = preferences.getLocalizedString("FileContentManager", "homeExtension"); // .sh3d
+  var currentName = this.home.getName();
+  var homeName = (currentName != null && currentName.length > 0
+      ? currentName.replace(/\.sh3[dx]$/i, "")
+      : "home") + homeExtension;
+  new HomeRecorder().writeHome(this.home, homeName, {
+      homeSaved: function(home, blob) {
+        if (navigator.msSaveOrOpenBlob !== undefined) {
+          navigator.msSaveOrOpenBlob(blob, homeName);
+        } else {
+          var downloadLink = document.createElement('a');
+          downloadLink.setAttribute("style", "display: none");
+          downloadLink.setAttribute("href", URL.createObjectURL(blob));
+          downloadLink.setAttribute("download", homeName);
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          setTimeout(function() {
+              document.body.removeChild(downloadLink);
+              URL.revokeObjectURL(downloadLink.getAttribute("href"));
+            }, 500);
+        }
+      },
+      homeError: function(status, error) {
+        console.log(status + " " + error);
+        alert(preferences.getLocalizedString("HomeController", "saveError", [homeName, error]));
+      }
+    });
+}
+
+/**
  * Creates a home controller handling savings for local files.
  * @param {Home} [home] the home controlled by this controller
- * @param {HomeApplication} [application] 
+ * @param {HomeApplication} [application]
  * @param {ViewFactory} [viewFactory]
  * @constructor
  * @author Emmanuel Puybaret
@@ -285,11 +322,10 @@ DirectRecordingHomeController.prototype.open = function() {
   var selectHome = function() {
       var request = controller.application.getHomeRecorder().getAvailableHomes({
           availableHomes: function(homes) {
-            if (homes.length == 0) {
-              var message = preferences.getLocalizedString("AppletContentManager", "showOpenDialog.noAvailableHomes");
-              alert(message);
-            } else {
-              var html = 
+            {
+              // Always show the dialog, even with zero homes: it's also the only place
+              // Upload lives, and a fresh shared server legitimately starts with no projects.
+              var html =
                 '  <div class="column1">' + 
                 '    <div>@{AppletContentManager.showOpenDialog.message}</div>' + 
                 '    <div class="home-list"></div>' + 
@@ -300,7 +336,7 @@ DirectRecordingHomeController.prototype.open = function() {
                   applier: function(dialog) {
                     var selectedItem = fileDialog.findElement(".selected");
                     if (selectedItem != null) {
-                      readTask(selectedItem.innerText);
+                      readTask(selectedItem.textContent);
                     }
                   },
                 });
@@ -315,41 +351,110 @@ DirectRecordingHomeController.prototype.open = function() {
               deleteButton.disabled = true;
               cancelButton.parentElement.insertBefore(deleteButton, cancelButton);
               var homeList = fileDialog.findElement(".home-list");
-                  
-              for (var i = 0; i < homes.length; i++) {
-                var item = document.createElement("div");
-                item.classList.add("item"); 
-                item.innerHTML = homes [i];
-                homeList.appendChild(item);
-              }
-              
-              var items = homeList.childNodes;
-              fileDialog.registerEventListener(items, "click", function(ev) {
-                  for (var i = 0; i < items.length; i++) {
-                    if (ev.target == items [i]) {
-                      items [i].classList.add("selected");
+
+              var homeListItemClickListener = function(ev) {
+                  var homeListItems = homeList.childNodes;
+                  for (var i = 0; i < homeListItems.length; i++) {
+                    if (ev.target == homeListItems [i]) {
+                      homeListItems [i].classList.add("selected");
                       okButton.disabled = false;
-                      deleteButton.disabled = ev.target.innerHTML == controller.home.getName();
+                      deleteButton.disabled = ev.target.textContent == controller.home.getName();
                     } else {
-                      items [i].classList.remove("selected");
+                      homeListItems [i].classList.remove("selected");
                     }
                   }
-                });
-              fileDialog.registerEventListener(items, "dblclick", function() {
+                };
+              var homeListItemDoubleClickListener = function() {
                   fileDialog.validate();
+                };
+              // Creates and appends a home-list row for homeName, wiring the same selection
+              // behavior as the rows built from the initial availableHomes list, so a newly
+              // uploaded project is immediately selectable without re-registering everything.
+              var addHomeListItem = function(homeName) {
+                  var item = document.createElement("div");
+                  item.classList.add("item");
+                  item.textContent = homeName;
+                  homeList.appendChild(item);
+                  fileDialog.registerEventListener(item, "click", homeListItemClickListener);
+                  fileDialog.registerEventListener(item, "dblclick", homeListItemDoubleClickListener);
+                  return item;
+                };
+
+              for (var i = 0; i < homes.length; i++) {
+                addHomeListItem(homes [i]);
+              }
+
+              // Upload control: between Open (okButton) and Delete, never inside .home-list.
+              var uploadFileInput = document.createElement("input");
+              uploadFileInput.type = "file";
+              uploadFileInput.accept = ".sh3d";
+              uploadFileInput.style.display = "none";
+              var uploadButton = document.createElement("button");
+              // No dedicated localized string exists for this new fork feature: the
+              // AppletContentManager bundle is generated from the (never-edit) desktop Java
+              // sources by a full JSweet/ant build not available in this checkout - see
+              // docs/ai-source-map.md's Localization section.
+              uploadButton.textContent = "Upload";
+              uploadButton.disabled = false;
+              cancelButton.parentElement.insertBefore(uploadFileInput, deleteButton);
+              cancelButton.parentElement.insertBefore(uploadButton, deleteButton);
+
+              fileDialog.registerEventListener(uploadButton, "click", function() {
+                  uploadFileInput.value = "";
+                  uploadFileInput.click();
                 });
+              fileDialog.registerEventListener(uploadFileInput, "change", function() {
+                  var file = uploadFileInput.files [0];
+                  if (!file) {
+                    return;
+                  }
+                  if (!/\.sh3d$/i.test(file.name) || file.name.indexOf("/") >= 0 || file.name.indexOf("\\") >= 0) {
+                    alert("Only a single .sh3d file can be uploaded.");
+                    return;
+                  }
+                  var recorderConfiguration = controller.application.getHomeRecorder().configuration;
+                  var uploadHomeURL = recorderConfiguration ? recorderConfiguration.uploadHomeURL : undefined;
+                  if (uploadHomeURL === undefined) {
+                    alert("Uploading projects isn't configured on this server.");
+                    return;
+                  }
+                  uploadButton.disabled = true;
+                  var formData = new FormData();
+                  formData.append("file", file, file.name);
+                  var request = new XMLHttpRequest();
+                  request.open("POST", uploadHomeURL, true);
+                  request.addEventListener("load", function() {
+                      uploadButton.disabled = false;
+                      if (request.status === 200) {
+                        addHomeListItem(file.name.substring(0, file.name.length - ".sh3d".length));
+                      } else if (request.status === 409) {
+                        alert("A project named \"" + file.name + "\" already exists. Choose another name and try again.");
+                      } else {
+                        console.log(request.status + " " + request.responseText);
+                        alert("Could not upload \"" + file.name + "\": " + request.responseText);
+                      }
+                    });
+                  var uploadErrorListener = function() {
+                      uploadButton.disabled = false;
+                      alert("Could not upload \"" + file.name + "\": network error.");
+                    };
+                  request.addEventListener("error", uploadErrorListener);
+                  request.addEventListener("timeout", uploadErrorListener);
+                  request.send(formData);
+                });
+
               fileDialog.registerEventListener(deleteButton, "click", function(ev) {
                   var item = fileDialog.findElement(".selected");
-                  controller.confirmDeleteHome(item.innerText, function() {
-                      controller.application.getHomeRecorder().deleteHome(item.innerText, {
+                  controller.confirmDeleteHome(item.textContent, function() {
+                      controller.application.getHomeRecorder().deleteHome(item.textContent, {
                           homeDeleted: function() {
                             item.remove();
                             okButton.disabled = true;
                             deleteButton.disabled = true;
                           },
                           homeError: function(status, error) {
-                            var message = preferences.getLocalizedString("AppletContentManager", "confirmDeleteHome.errorMessage", item.innerText);
-                            console.log(message + " : " + error); 
+                            var message = preferences.getLocalizedString("AppletContentManager", "confirmDeleteHome.errorMessage", item.textContent);
+                            console.log(message + " : " + error);
                             alert(message);
                           }
                         });

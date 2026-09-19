@@ -261,6 +261,23 @@ button:disabled {
   opacity: 0.5;
 }
 
+/* Plain text-labeled toolbar buttons (e.g. Export) that have no generated icon resource.
+   vertical-align: top is required here: these buttons are inline-block siblings of icon-only
+   buttons, and mixing default "baseline" alignment (icon buttons) with a text button's
+   different glyph-baseline metrics visibly misaligns them - "middle" was tried first and
+   still measured ~5px off (verified with getBoundingClientRect, not just eyeballed - a
+   visual-only check missed this the first time). "top" (like "bottom") measures an exact
+   0px center difference against sibling buttons of the same box height. */
+.toolbar .toolbar-button.toolbar-text-button {
+  width: auto;
+  padding-left: 8px;
+  padding-right: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
 @media (min-width: 940px) {
   .toolbar {
     display: flex;

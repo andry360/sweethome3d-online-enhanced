@@ -922,6 +922,29 @@ HomePane.prototype.createLockUnlockBasePlanButton = function(home, additionalCla
 }
 
 /**
+ * Returns a toolbar button that downloads the current home as a .sh3d file.
+ * Not backed by a generated ActionType (no icon resource is available for it without a
+ * full JSweet/ant build in this checkout), so it's a plain labeled button rather than one
+ * built with createToolBarButton.
+ * @param {HomeController} controller
+ * @return {HTMLButton}
+ * @private
+ */
+HomePane.prototype.createExportHomeButton = function(controller) {
+  var button = document.createElement("button");
+  button.id = "toolbar-button-EXPORT_HOME";
+  button.classList.add("toolbar-button");
+  button.classList.add("toolbar-text-button");
+  button.textContent = "Export";
+  button.title = "Export the current home as a .sh3d file";
+  button.tabIndex = -1;
+  button.addEventListener("click", function() {
+      controller.exportHome();
+    });
+  return button;
+}
+
+/**
  * Returns Enable / Disable magnetism button.
  * @param {UserPreferences} preferences
  * @param {string} additionalClass additional CSS class
@@ -1117,8 +1140,9 @@ HomePane.prototype.createToolBar = function(home, preferences, controller) {
   } 
   if (toolBar.classList.contains("save-as")) {
     this.addActionToToolBar(HomeView.ActionType.SAVE_AS, toolBar);
+    this.addButtonToToolBar(toolBar, this.createExportHomeButton(controller));
     fileButton = true;
-  } 
+  }
   if (fileButton) {
     this.addSeparator(toolBar); 
   }
