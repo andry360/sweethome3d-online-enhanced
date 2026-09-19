@@ -2,7 +2,7 @@
 //
 // Local dev stand-in for deployDirectHomeRecorder/*.php, used to exercise the shared-projects
 // feature (list/read/write/delete/upload of .sh3d homes stored as .sh3x) against test/testHome.html
-// without needing a PHP install. Serves the whole SweetHome3DJS-7.5.2-src tree statically and
+// without needing a PHP install. Serves the whole repo tree statically and
 // layers the same route names/query contract the production PHP scripts use, so
 // test/testHome.html's server config only needs a different urlBase to switch between this and
 // the real deployment. Runtime data lives in local-server/data/ (gitignored), never under

@@ -1,13 +1,15 @@
 # Real test fixtures with unclear redistribution terms - place locally, do not commit
 /import-materials-for-tests/
 
-# Homes saved to the local dev server (SweetHome3DJS-7.5.2-src/local-server/server.js) - runtime
-# user data, not source
-/SweetHome3DJS-7.5.2-src/local-server/data/
+# Homes saved to the local dev server (local-server/server.js) - runtime user data, not source
+/local-server/data/
 
 # ant applicationLibraries/applicationResources build output (JSweet-transpiled bundle and
 # resource JSON generated from the desktop Java sources) - regenerate with the build, don't commit
-/SweetHome3DJS-7.5.2-src/lib/generated/
-/SweetHome3DJS-7.5.2-src/lib/resources/
+/lib/generated/
+/lib/resources/
 
 /SweetHome3DJS_online_customization_plan.md
+
+# Claude Code tool-permission settings contain machine-specific absolute paths - keep local only
+/.claude/settings.json
